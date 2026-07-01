@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OldCamGuard Local</title>
+<meta name="theme-color" content="#009688">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<!--
+=======================================================
+  OldCamGuard LOCAL — No Firebase, No HTTPS, No Login
+  Same WiFi network par banne phone chalashe.
+
+  SETUP:
+  1. Phone par Python chalavo:
+       python -m http.server 8080
+     Ya koi bhi HTTP server.
+
+  2. Banne phones Chrome ma open karo:
+       http://YOUR_PC_IP:8080/oldcamguard-local.html
+
+  3. Chrome ma camera permission mate:
+       chrome://flags/#unsafely-treat-insecure-origin-as-secure
+       -> tamaro IP:port add karo -> Relaunch
+
+  4. CAM phone par "CAMERA" dabavo
+     VIEWER phone par "VIEWER" dabavo
+     Pachhi niche na steps follow karo.
+=======================================================
+-->
+
+<style>
+:root{
+  --teal:#009688;
+  --teal-dark:#00695c;
+  --bg:#0c0f0e;
+  --card:#161b1a;
+  --card2:#1c2220;
+  --danger:#e53935;
+  --warn:#f57c00;
+  --ok:#43a047;
+  --text:#eee;
+  --muted:#8a9e99;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif;}
+
+header{
+  background:linear-gradient(135deg,var(--teal),var(--teal-dark));
+  padding:13px 16px;font-size:20px;font-weight:bold;
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.hright{display:flex;align-items:center;gap:10px;}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--danger);display:inline-block;transition:background .4s;}
+.dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);}
+
+main{padding:12px;max-width:520px;margin:0 auto;padding-bottom:20px;}
+
+.card{background:var(--card);border-radius:14px;padding:15px;margin-bottom:12px;box-shadow:0 2px 10px rgba(0,0,0,.5);}
+.card2{background:var(--card2);border-radius:10px;padding:12px;margin-bottom:8px;}
+h3{margin:0 0 10px;color:var(--teal);font-size:17px;}
+
+input[type=text],textarea{
+  width:100%;padding:11px;margin:5px 0;
+  border-radius:9px;border:1px solid #2a3330;
+  background:#0e1413;color:var(--text);font-size:14px;
+  font-family:monospace;
+}
+textarea{min-height:90px;resize:vertical;}
+input[type=range]{width:100%;accent-color:var(--teal);margin:4px 0;}
+
+button{
+  padding:12px 14px;margin:4px 3px 4px 0;font-size:15px;
+  border:none;border-radius:10px;background:var(--teal);
+  color:white;cursor:pointer;transition:opacity .15s;
+}
+button:active{opacity:.75;}
+button.sec{background:#2a3330;}
+button.danger{background:var(--danger);}
+button.warn{background:var(--warn);}
+button:disabled{opacity:.35;}
+button.full{width:100%;margin:5px 0;}
+
+video{width:100%;border-radius:10px;background:#000;display:block;margin-top:6px;}
+canvas{display:none;}
+
+.row{display:flex;gap:8px;}
+.row>*{flex:1;}
+
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;background:#1e2826;color:var(--muted);}
+.badge.live{background:var(--danger);color:white;animation:pulse 2s infinite;}
+.badge.ok{background:var(--ok);color:white;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+
+.motionbar-wrap{margin:8px 0 4px;}
+.motionbar-label{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;}
+.motionbar-bg{background:#1a2220;border-radius:6px;height:8px;overflow:hidden;margin-top:3px;}
+.motionbar-fill{height:100%;width:0%;background:var(--ok);border-radius:6px;transition:width .3s,background .3s;}
+
+.stats{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;}
+.stat{background:#0e1413;border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted);flex:1;text-align:center;min-width:60px;}
+.stat span{display:block;font-size:16px;font-weight:bold;color:var(--text);}
+
+.clip{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#0e1413;border-radius:8px;margin-bottom:6px;font-size:13px;}
+.clip a{color:var(--teal);text-decoration:none;font-weight:bold;}
+
+.alert-box{padding:12px;border-radius:10px;margin-bottom:10px;font-size:14px;}
+.alert-box.err{background:#2d1515;border:1px solid var(--danger);color:#ef9a9a;}
+.alert-box.info{background:#0e2018;border:1px solid var(--teal);color:#80cbc4;}
+.alert-box.warn{background:#2a1e0a;border:1px solid var(--warn);color:#ffcc80;}
+
+.step{
+  background:#0e1413;border-radius:10px;padding:12px;
+  margin-bottom:8px;border-left:3px solid var(--teal);
+}
+.step-num{
+  font-size:11px;color:var(--teal);font-weight:bold;margin-bottom:4px;
+}
+
+.log{font-family:monospace;font-size:11px;color:var(--muted);max-height:120px;overflow-y:auto;background:#080c0b;padding:8px;border-radius:8px;margin-top:8px;}
+.log .lerr{color:#ef9a9a;}
+.log .lok{color:#a5d6a7;}
+.log .lwarn{color:#ffcc80;}
+
+.hidden{display:none!important;}
+.muted{color:var(--muted);font-size:13px;}
+.big-btn{font-size:22px;padding:20px;border-radius:14px;width:100%;margin:8px 0;}
+</style>
+</head>
+<body>
+
+<header>
+  <span>📷 OldCamGuard <span id="roleTag" class="badge">LOCAL</span></span>
+  <div class="hright">
+    <span id="battText" class="muted" style="font-size:12px;"></span>
+    <span class="dot" id="connDot"></span>
+  </div>
+</header>
+
+<main>
+
+<!-- ======== PROTOCOL / FLAG WARNINGS ======== -->
+<div id="protocolWarn" class="hidden">
+  <div class="alert-box err">
+    <strong>❌ ફાઈલ સીધી ખોલી છે — Camera કામ નહીં કરે.</strong><br><br>
+    Camera permission ફક્ત <strong>http://</strong> અથવા <strong>https://</strong> પર મળે.<br><br>
+    <strong>સૌથી સહેલો રસ્તો — Android Termux:</strong><br>
+    1. Play Store થી <strong>Termux</strong> install કરો<br>
+    2. Termux ખોલો:
+    <code style="display:block;margin:6px 0;padding:8px;background:#111;border-radius:6px;font-size:12px;">pkg install python -y</code>
+    3. ફાઈલ <code>/sdcard/</code> folder માં copy કરો<br>
+    4. Termux માં:
+    <code style="display:block;margin:6px 0;padding:8px;background:#111;border-radius:6px;font-size:12px;">cd /sdcard &amp;&amp; python -m http.server 8080</code>
+    5. Chrome માં ખોલો:
+    <code style="display:block;margin:6px 0;padding:8px;background:#111;border-radius:6px;font-size:12px;">http://localhost:8080/oldcamguard-local.html</code>
+  </div>
+</div>
+
+<div id="flagWarn" class="hidden">
+  <div class="alert-box warn">
+    ⚠️ <strong>HTTP IP address — Camera permission માટે Chrome Flag જોઈએ.</strong><br><br>
+    <strong>Step 1:</strong> Chrome new tab → address bar માં type કરો:<br>
+    <code style="display:block;margin:6px 0;padding:8px;background:#1a1500;border-radius:6px;font-size:11px;word-break:break-all;">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>
+    <button class="full" style="margin:6px 0;" onclick="copyFlag()">📋 URL Copy કરો</button>
+    <strong>Step 2:</strong> ત્યાં આ address box માં ઉમેરો:<br>
+    <code id="thisOrigin" style="display:block;margin:6px 0;padding:8px;background:#1a1500;border-radius:6px;font-size:13px;word-break:break-all;color:#ffcc80;"></code>
+    <button class="full" style="margin:4px 0;" onclick="copyOrigin()">📋 Origin Copy કરો</button>
+    <strong>Step 3:</strong> નીચે <strong>Relaunch</strong> button દાબો → પાછા આ page ખોલો.
+  </div>
+</div>
+
+<!-- ======== ROLE SELECT ======== -->
+<div id="screenRole">
+  <div class="card">
+    <h3>📱 આ ફોન શું છે?</h3>
+    <p class="muted">બંને ફોન same WiFi પર હોવા જોઈએ.</p>
+    <button class="big-btn" onclick="setRole('cam')">📹 CAMERA<br><span style="font-size:14px;opacity:.8;">જૂનો ફોન</span></button>
+    <button class="big-btn sec" onclick="setRole('viewer')">🖥️ VIEWER<br><span style="font-size:14px;opacity:.8;">મુખ્ય ફોન</span></button>
+  </div>
+</div>
+
+<!-- ======== CAM SCREEN ======== -->
+<div id="screenCam" class="hidden">
+
+  <div class="card">
+    <h3>Camera <span id="camLiveBadge" class="badge">idle</span></h3>
+    <video id="camVideo" autoplay playsinline muted></video>
+    <canvas id="motionCanvas"></canvas>
+
+    <div class="stats" style="margin-top:10px;">
+      <div class="stat">Motion<span id="statMotion">0</span></div>
+      <div class="stat">Clips<span id="statClips">0</span></div>
+      <div class="stat">Uptime<span id="statUptime">0m</span></div>
+    </div>
+
+    <div class="motionbar-wrap">
+      <div class="motionbar-label"><span>Motion level</span><span id="motionScore">0</span></div>
+      <div class="motionbar-bg"><div class="motionbar-fill" id="motionFill"></div></div>
+    </div>
+
+    <p class="muted" style="margin:8px 0 2px;">Sensitivity</p>
+    <input id="sensitivity" type="range" min="5" max="60" value="25">
+
+    <p class="muted" style="margin:8px 0 2px;">Clip duration</p>
+    <div class="row">
+      <button class="sec" id="dur10" onclick="setDur(10)">10s</button>
+      <button class="sec" id="dur20" onclick="setDur(20)">20s</button>
+      <button class="sec" id="dur30" onclick="setDur(30)">30s</button>
+      <button class="sec" id="dur60" onclick="setDur(60)">60s</button>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button onclick="startCamSession()" id="btnStart">▶ Start</button>
+      <button class="danger" onclick="stopCamSession()">⏹ Stop</button>
+      <button class="sec" id="btnTorch" onclick="toggleTorch()">🔦</button>
+    </div>
+
+    <p id="camStatus" class="muted" style="margin-top:8px;">Not started.</p>
+  </div>
+
+  <!-- SDP SIGNALING -->
+  <div class="card">
+    <h3>🔗 Viewer ને Connect કરો</h3>
+
+    <div class="step">
+      <div class="step-num">STEP 1</div>
+      <p class="muted" style="margin:0 0 6px;">Camera start કર્યા પછી આ button દાબો:</p>
+      <button class="full" onclick="createOffer()">📤 Offer Generate કરો</button>
+    </div>
+
+    <div class="step" id="stepCopyOffer" style="display:none;">
+      <div class="step-num">STEP 2 — આ text COPY કરો → Viewer ફોન પર PASTE કરો</div>
+      <textarea id="offerText" readonly></textarea>
+      <button class="full" onclick="copyText('offerText')">📋 Copy Offer</button>
+    </div>
+
+    <div class="step" id="stepPasteAnswer" style="display:none;">
+      <div class="step-num">STEP 3 — Viewer ફોન પરથી Answer text અહીં PASTE કરો</div>
+      <textarea id="answerInput" placeholder="Viewer નો Answer અહીં paste કરો..."></textarea>
+      <button class="full" onclick="setAnswer()">✅ Answer Set કરો</button>
+    </div>
+
+    <div class="log" id="camLog"></div>
+  </div>
+
+  <!-- CLIPS -->
+  <div class="card">
+    <h3>🎞️ Clips (Local Download)</h3>
+    <div id="clipList"><p class="muted">Motion detect થશે ત્યારે clips અહીં દેખાશે.</p></div>
+  </div>
+
+</div>
+
+<!-- ======== VIEWER SCREEN ======== -->
+<div id="screenViewer" class="hidden">
+
+  <div class="card">
+    <h3>Live View <span id="viewerLiveBadge" class="badge">offline</span></h3>
+    <video id="remoteVideo" autoplay playsinline></video>
+
+    <div class="stats" style="margin-top:10px;">
+      <div class="stat">State<span id="viewerConnState">--</span></div>
+    </div>
+
+    <div class="alert-box info hidden" id="motionAlertViewer">🚨 Motion detected on camera!</div>
+
+    <div class="row" style="margin-top:8px;">
+      <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+    </div>
+    <p id="viewerStatus" class="muted" style="margin-top:8px;">Waiting...</p>
+  </div>
+
+  <!-- SDP SIGNALING -->
+  <div class="card">
+    <h3>🔗 Camera ને Connect કરો</h3>
+
+    <div class="step">
+      <div class="step-num">STEP 1 — Camera ફોન પરથી Offer text અહીં PASTE કરો</div>
+      <textarea id="offerInput" placeholder="Camera નો Offer અહીં paste કરો..."></textarea>
+      <button class="full" onclick="createAnswer()">📤 Answer Generate કરો</button>
+    </div>
+
+    <div class="step" id="stepCopyAnswer" style="display:none;">
+      <div class="step-num">STEP 2 — આ text COPY કરો → Camera ફોન પર PASTE કરો</div>
+      <textarea id="answerText" readonly></textarea>
+      <button class="full" onclick="copyText('answerText')">📋 Copy Answer</button>
+    </div>
+
+    <div class="log" id="viewerLog"></div>
+  </div>
+
+</div>
+
+<!-- ROLE SWITCH BUTTON -->
+<div id="switchBtn" class="hidden" style="text-align:center;margin-top:4px;">
+  <button class="sec" onclick="switchRole()" style="font-size:13px;padding:8px 16px;">↩ Role બદલો</button>
+</div>
+
+</main>
+
+<script>
+/* ===================== PROTOCOL CHECK ===================== */
+(function(){
+  const proto = location.protocol;
+  const host  = location.hostname;
+  const origin = location.origin;
+  document.getElementById('thisOrigin').textContent = origin;
+
+  if(proto === 'file:' || proto === 'content:'){
+    document.getElementById('protocolWarn').classList.remove('hidden');
+    document.getElementById('screenRole').classList.add('hidden');
+    document.getElementById('currentProto').textContent = proto + '//';
+    return;
+  }
+  // http:// on IP address (not localhost) → needs Chrome flag
+  if(proto === 'http:' && host !== 'localhost' && host !== '127.0.0.1'){
+    document.getElementById('flagWarn').classList.remove('hidden');
+  }
+})();
+
+function copyFlag(){
+  const url = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
+  navigator.clipboard.writeText(url).then(()=>alert('✅ Copied! Chrome new tab માં paste કરો.')).catch(()=>{
+    prompt('આ copy કરો:', url);
+  });
+}
+function copyOrigin(){
+  const t = document.getElementById('thisOrigin').textContent;
+  navigator.clipboard.writeText(t).then(()=>alert('✅ Copied!')).catch(()=>{ prompt('Copy:',t); });
+}
+
+/* ===================== STATE ===================== */
+let role = null;
+let pc = null;
+let localStream = null;
+let camStream = null;
+let motionInterval = null;
+let recorder = null;
+let recChunks = [];
+let isRecording = false;
+let lastFrameData = null;
+let clipDuration = 10;
+let clipCount = 0;
+let sessionStart = null;
+let uptimeTimer = null;
+let torchOn = false;
+let torchTrack = null;
+let wakeLock = null;
+
+const RTC_CFG = { iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun2.l.google.com:19302'}
+]};
+
+/* ===================== LOG ===================== */
+function log(id, msg, type=''){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const d = document.createElement('div');
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  if(type) d.className = 'l'+type;
+  el.prepend(d);
+  while(el.children.length > 50) el.removeChild(el.lastChild);
+}
+function camLog(m,t){ log('camLog',m,t); }
+function viewLog(m,t){ log('viewerLog',m,t); }
+
+/* ===================== BATTERY ===================== */
+if(navigator.getBattery){
+  navigator.getBattery().then(b=>{
+    function upd(){ document.getElementById('battText').textContent=(b.charging?'⚡':'🔋')+Math.round(b.level*100)+'%'; }
+    upd(); b.addEventListener('levelchange',upd); b.addEventListener('chargingchange',upd);
+  });
+}
+
+/* ===================== WAKE LOCK ===================== */
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); }
+  }catch(e){}
+}
+function releaseWakeLock(){ if(wakeLock){ wakeLock.release(); wakeLock=null; } }
+
+/* ===================== ROLE ===================== */
+function setRole(r){
+  role = r;
+  document.getElementById('screenRole').classList.add('hidden');
+  document.getElementById('switchBtn').classList.remove('hidden');
+  if(r === 'cam'){
+    document.getElementById('screenCam').classList.remove('hidden');
+    document.getElementById('roleTag').textContent = 'CAM';
+    document.getElementById('roleTag').className = 'badge live';
+  } else {
+    document.getElementById('screenViewer').classList.remove('hidden');
+    document.getElementById('roleTag').textContent = 'VIEWER';
+    document.getElementById('roleTag').className = 'badge ok';
+  }
+}
+
+function switchRole(){
+  stopCamSession();
+  releaseWakeLock();
+  if(pc){ pc.close(); pc=null; }
+  document.getElementById('screenCam').classList.add('hidden');
+  document.getElementById('screenViewer').classList.add('hidden');
+  document.getElementById('switchBtn').classList.add('hidden');
+  document.getElementById('screenRole').classList.remove('hidden');
+  document.getElementById('roleTag').textContent = 'LOCAL';
+  document.getElementById('roleTag').className = 'badge';
+  document.getElementById('connDot').classList.remove('on');
+  // reset SDP UI
+  ['stepCopyOffer','stepPasteAnswer','stepCopyAnswer'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display='none';
+  });
+  ['offerText','answerInput','offerInput','answerText'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+}
+
+/* ===================== CLIP DURATION ===================== */
+function setDur(s){
+  clipDuration = s;
+  [10,20,30,60].forEach(d=>{
+    const b=document.getElementById('dur'+d);
+    if(b) b.style.background = d===s ? 'var(--teal)' : '';
+  });
+}
+setDur(10);
+
+/* ===================== CAM SESSION ===================== */
+async function startCamSession(){
+  // Check if getUserMedia is available at all
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    const proto = location.protocol;
+    let msg = '❌ Camera API ઉપલબ્ધ નથી.';
+    if(proto === 'file:' || proto === 'content:'){
+      msg = '❌ file:// protocol — Camera permission મળતી નથી. HTTP server વાપરો.';
+    } else if(proto === 'http:' && location.hostname !== 'localhost'){
+      msg = '❌ HTTP IP address — Chrome flag સેટ કર્યો છે? chrome://flags/#unsafely-treat-insecure-origin-as-secure';
+    }
+    document.getElementById('camStatus').textContent = msg;
+    camLog(msg, 'err');
+    document.getElementById('flagWarn').classList.remove('hidden');
+    return;
+  }
+
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'}, audio:true });
+  } catch(e){
+    let msg = '❌ Camera error: ' + e.message;
+    if(e.name === 'NotAllowedError'){
+      msg = '❌ Camera permission DENY કરી. Phone Settings → Chrome → Permissions → Camera → Allow કરો.';
+    } else if(e.name === 'NotFoundError'){
+      msg = '❌ Camera ન મળ્યો. ફોનમાં camera છે?';
+    } else if(e.name === 'NotReadableError'){
+      msg = '❌ Camera બીજી app use કરી રહી છે. બધી apps બંધ કરો.';
+    } else if(e.name === 'OverconstrainedError'){
+      // retry without facingMode
+      try{
+        camStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      } catch(e2){
+        msg = '❌ Camera error: ' + e2.message;
+        document.getElementById('camStatus').textContent = msg;
+        camLog(msg,'err');
+        return;
+      }
+    }
+    if(!camStream){
+      document.getElementById('camStatus').textContent = msg;
+      camLog(msg,'err');
+      return;
+    }
+  }
+  document.getElementById('camVideo').srcObject = camStream;
+  localStream = camStream;
+  torchTrack = camStream.getVideoTracks()[0];
+
+  clipCount=0; sessionStart=Date.now();
+  document.getElementById('statClips').textContent='0';
+  if(uptimeTimer) clearInterval(uptimeTimer);
+  uptimeTimer = setInterval(()=>{
+    document.getElementById('statUptime').textContent = Math.floor((Date.now()-sessionStart)/60000)+'m';
+  }, 30000);
+
+  document.getElementById('camLiveBadge').textContent='GUARDING';
+  document.getElementById('camLiveBadge').className='badge live';
+  document.getElementById('camStatus').textContent='👁️ Watching for motion...';
+  camLog('Session started.','ok');
+  requestWakeLock();
+  startMotionDetection();
+}
+
+function stopCamSession(){
+  if(motionInterval) clearInterval(motionInterval);
+  if(uptimeTimer) clearInterval(uptimeTimer);
+  if(recorder && recorder.state!=='inactive') recorder.stop();
+  if(camStream) camStream.getTracks().forEach(t=>t.stop());
+  torchOn=false; torchTrack=null;
+  document.getElementById('camLiveBadge').textContent='idle';
+  document.getElementById('camLiveBadge').className='badge';
+  document.getElementById('camStatus').textContent='Stopped.';
+  document.getElementById('connDot').classList.remove('on');
+  camLog('Session stopped.');
+}
+
+/* ===================== TORCH ===================== */
+async function toggleTorch(){
+  if(!torchTrack){ camLog('Camera not started.','err'); return; }
+  try{
+    torchOn=!torchOn;
+    await torchTrack.applyConstraints({advanced:[{torch:torchOn}]});
+    document.getElementById('btnTorch').textContent = torchOn?'🔦 ON':'🔦';
+    camLog('Torch '+(torchOn?'on':'off'));
+  } catch(e){ camLog('Torch not supported: '+e.message,'err'); }
+}
+
+/* ===================== MOTION ===================== */
+function startMotionDetection(){
+  const video = document.getElementById('camVideo');
+  const canvas = document.getElementById('motionCanvas');
+  const ctx = canvas.getContext('2d');
+  lastFrameData=null;
+
+  motionInterval = setInterval(()=>{
+    if(!video.videoWidth) return;
+    canvas.width=160; canvas.height=120;
+    ctx.drawImage(video,0,0,160,120);
+    const frame = ctx.getImageData(0,0,160,120);
+    if(lastFrameData){
+      const score = frameDiff(lastFrameData.data, frame.data);
+      const threshold = parseInt(document.getElementById('sensitivity').value,10);
+      const pct = Math.min(100, Math.round(score/threshold*100));
+      const fill = document.getElementById('motionFill');
+      fill.style.width = pct+'%';
+      fill.style.background = pct>90?'var(--danger)':pct>60?'var(--warn)':'var(--ok)';
+      document.getElementById('motionScore').textContent = score;
+      document.getElementById('statMotion').textContent = score;
+      if(score>threshold && !isRecording){
+        camLog('🚨 Motion (score '+score+') — recording...','warn');
+        notifyViewerMotion();
+        startRecordingClip();
+      }
+    }
+    lastFrameData=frame;
+  }, 700);
+}
+
+function frameDiff(a,b){
+  let d=0;
+  for(let i=0;i<a.length;i+=16){ if(Math.abs(a[i]-b[i])>25) d++; }
+  return Math.round(d/30);
+}
+
+/* ===== Motion notify via BroadcastChannel (same device) or DataChannel ===== */
+let dataChannel = null;
+
+function notifyViewerMotion(){
+  // Try via BroadcastChannel (same device, different tab)
+  try{
+    const bc = new BroadcastChannel('ocg_motion');
+    bc.postMessage({motion:true, ts:Date.now()});
+    bc.close();
+  } catch(e){}
+  // Try via WebRTC data channel
+  if(dataChannel && dataChannel.readyState==='open'){
+    try{ dataChannel.send(JSON.stringify({motion:true,ts:Date.now()})); } catch(e){}
+  }
+}
+
+/* ===================== RECORDING ===================== */
+function startRecordingClip(){
+  if(!camStream) return;
+  recChunks=[]; isRecording=true;
+  document.getElementById('camStatus').textContent='⏺️ Recording ('+clipDuration+'s)...';
+  const types=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9','video/webm','video/mp4'];
+  const mt = types.find(t=>MediaRecorder.isTypeSupported(t))||'';
+  recorder = new MediaRecorder(camStream, mt?{mimeType:mt}:{});
+  recorder.ondataavailable = e=>{ if(e.data.size>0) recChunks.push(e.data); };
+  recorder.onstop = onClipFinished;
+  recorder.start();
+  setTimeout(()=>{ if(isRecording && recorder.state!=='inactive') recorder.stop(); }, clipDuration*1000);
+}
+
+function onClipFinished(){
+  isRecording=false;
+  clipCount++;
+  document.getElementById('statClips').textContent=clipCount;
+  const blob = new Blob(recChunks,{type:'video/webm'});
+  const fname = 'clip_'+new Date().toISOString().replace(/[:.]/g,'-')+'.webm';
+  const sizeKB = (blob.size/1024).toFixed(0);
+  camLog('Clip: '+fname+' ('+sizeKB+' KB)','ok');
+  document.getElementById('camStatus').textContent='👁️ Watching for motion...';
+
+  const url = URL.createObjectURL(blob);
+
+  // 1) Auto-download immediately (saves to phone Downloads folder)
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // 2) Also show in clip list with Share button (for saving to Gallery)
+  const list = document.getElementById('clipList');
+  // Remove placeholder text
+  const ph = list.querySelector('p');
+  if(ph) ph.remove();
+
+  const div = document.createElement('div');
+  div.className='clip';
+
+  // Share button (Web Share API — saves to Gallery on Android)
+  const canShare = navigator.canShare && navigator.canShare({files:[new File([blob], fname, {type:'video/webm'})]});
+  const shareBtn = canShare
+    ? '<button onclick="shareClip(this)" data-url="'+url+'" data-name="'+fname+'" style="padding:6px 10px;font-size:13px;background:var(--ok);">📲 Gallery</button>'
+    : '<a href="'+url+'" download="'+fname+'" style="padding:6px 10px;font-size:13px;background:var(--teal);border-radius:8px;color:white;text-decoration:none;">⬇ Save</a>';
+
+  div.innerHTML =
+    '<div>' +
+      '<div style="font-size:12px;color:var(--text);">📹 clip_'+clipCount+'</div>' +
+      '<div style="font-size:11px;color:var(--muted);">'+sizeKB+' KB &bull; '+new Date().toLocaleTimeString()+'</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;">' +
+      shareBtn +
+      '<a href="'+url+'" download="'+fname+'" style="padding:6px 10px;font-size:13px;background:var(--teal);border-radius:8px;color:white;text-decoration:none;">⬇ DL</a>' +
+    '</div>';
+  list.prepend(div);
+}
+
+async function shareClip(btn){
+  const url = btn.getAttribute('data-url');
+  const name = btn.getAttribute('data-name');
+  try{
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const file = new File([blob], name, {type:'video/webm'});
+    await navigator.share({ files:[file], title:'OldCamGuard Clip' });
+  } catch(e){
+    camLog('Share error: '+e.message,'err');
+  }
+}
+
+/* ===================== WEBRTC — CAM SIDE ===================== */
+async function createOffer(){
+  if(!localStream){ alert('પહેલા "▶ Start" દાબો.'); return; }
+  if(pc){ pc.close(); }
+  pc = new RTCPeerConnection(RTC_CFG);
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+
+  // Data channel for motion alerts
+  dataChannel = pc.createDataChannel('ocg');
+
+  pc.onconnectionstatechange = ()=>{
+    const s=pc.connectionState;
+    document.getElementById('connDot').classList.toggle('on', s==='connected');
+    camLog('WebRTC: '+s, s==='connected'?'ok':s==='failed'?'err':'');
+  };
+
+  // Collect ALL ICE candidates first (trickle-free for copy-paste)
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  camLog('Gathering ICE candidates...','warn');
+  document.getElementById('stepCopyOffer').style.display='none';
+  document.getElementById('offerText').value='Gathering...';
+
+  await new Promise(resolve=>{
+    if(pc.iceGatheringState==='complete') { resolve(); return; }
+    const check = setInterval(()=>{
+      if(pc.iceGatheringState==='complete'){ clearInterval(check); resolve(); }
+    }, 200);
+    setTimeout(()=>{ clearInterval(check); resolve(); }, 5000);
+  });
+
+  const sdp = JSON.stringify(pc.localDescription);
+  document.getElementById('offerText').value = sdp;
+  document.getElementById('stepCopyOffer').style.display='block';
+  document.getElementById('stepPasteAnswer').style.display='block';
+  camLog('Offer ready. Viewer ને copy-paste કરો.','ok');
+}
+
+async function setAnswer(){
+  const raw = document.getElementById('answerInput').value.trim();
+  if(!raw){ alert('Answer paste કરો.'); return; }
+  try{
+    const ans = JSON.parse(raw);
+    await pc.setRemoteDescription(new RTCSessionDescription(ans));
+    camLog('Answer set. Connection establishing...','ok');
+  } catch(e){ camLog('Answer error: '+e.message,'err'); }
+}
+
+/* ===================== WEBRTC — VIEWER SIDE ===================== */
+async function createAnswer(){
+  const raw = document.getElementById('offerInput').value.trim();
+  if(!raw){ alert('Camera નો Offer paste કરો.'); return; }
+
+  if(pc){ pc.close(); }
+  pc = new RTCPeerConnection(RTC_CFG);
+
+  pc.ondatachannel = e=>{
+    e.channel.onmessage = msg=>{
+      try{
+        const d=JSON.parse(msg.data);
+        if(d.motion) showMotionAlert();
+      } catch(ex){}
+    };
+  };
+
+  pc.ontrack = e=>{
+    document.getElementById('remoteVideo').srcObject=e.streams[0];
+    document.getElementById('viewerLiveBadge').textContent='LIVE';
+    document.getElementById('viewerLiveBadge').className='badge live';
+    document.getElementById('viewerStatus').textContent='✅ Connected!';
+    document.getElementById('viewerConnState').textContent='🟢';
+    document.getElementById('connDot').classList.add('on');
+    viewLog('Video received!','ok');
+  };
+
+  pc.onconnectionstatechange = ()=>{
+    const s=pc.connectionState;
+    document.getElementById('connDot').classList.toggle('on',s==='connected');
+    document.getElementById('viewerConnState').textContent =
+      s==='connected'?'🟢':s==='connecting'?'⏳':'🔴';
+    if(s==='disconnected'||s==='failed'){
+      document.getElementById('viewerLiveBadge').textContent='offline';
+      document.getElementById('viewerLiveBadge').className='badge';
+    }
+    viewLog('WebRTC: '+s, s==='connected'?'ok':s==='failed'?'err':'');
+  };
+
+  try{
+    const offer = JSON.parse(raw);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    viewLog('Gathering ICE candidates...','warn');
+    await new Promise(resolve=>{
+      if(pc.iceGatheringState==='complete'){resolve();return;}
+      const chk=setInterval(()=>{ if(pc.iceGatheringState==='complete'){clearInterval(chk);resolve();} },200);
+      setTimeout(()=>{clearInterval(chk);resolve();},5000);
+    });
+
+    const sdp = JSON.stringify(pc.localDescription);
+    document.getElementById('answerText').value=sdp;
+    document.getElementById('stepCopyAnswer').style.display='block';
+    viewLog('Answer ready. Camera ફોન પર copy-paste કરો.','ok');
+  } catch(e){
+    viewLog('Offer error: '+e.message,'err');
+  }
+}
+
+/* ===================== MOTION ALERT ON VIEWER ===================== */
+function showMotionAlert(){
+  const el=document.getElementById('motionAlertViewer');
+  el.classList.remove('hidden');
+  playBeep();
+  setTimeout(()=>el.classList.add('hidden'),5000);
+}
+
+// BroadcastChannel listener (same device, different tab)
+try{
+  const bc=new BroadcastChannel('ocg_motion');
+  bc.onmessage=e=>{ if(e.data && e.data.motion) showMotionAlert(); };
+}catch(e){}
+
+function playBeep(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value=880;
+    g.gain.setValueAtTime(0.4,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.6);
+    o.start(); o.stop(ctx.currentTime+0.6);
+  }catch(e){}
+}
+
+/* ===================== COPY TEXT ===================== */
+function copyText(id){
+  const el=document.getElementById(id);
+  el.select();
+  el.setSelectionRange(0,99999);
+  try{
+    navigator.clipboard.writeText(el.value).then(()=>alert('✅ Copied!')).catch(()=>{
+      document.execCommand('copy'); alert('✅ Copied!');
+    });
+  }catch(e){ document.execCommand('copy'); alert('✅ Copied!'); }
+}
+
+/* ===================== FULLSCREEN ===================== */
+function toggleFullscreen(){
+  const v=document.getElementById('remoteVideo');
+  if(v.requestFullscreen) v.requestFullscreen();
+  else if(v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+}
+</script>
+</body>
+</html>
